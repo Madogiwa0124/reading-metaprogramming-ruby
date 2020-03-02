@@ -6,6 +6,21 @@ TryOver3 = Module.new
 # - `test_` メソッドがこのクラスに実装されていなくても `test_` から始まるメッセージに応答することができる
 # - TryOver3::A1 には `test_` から始まるインスタンスメソッドが定義されていない
 
+class TryOver3::A1
+  METHOD_PREFIX_RGXP = /test_.*/.freeze
+
+  def run_test
+    nil
+  end
+
+  def method_missing(name, _args=nil)
+    name.to_s.match?(METHOD_PREFIX_RGXP) ? run_test : super
+  end
+
+  def respond_to_missing?(name, _include_private)
+    name.match?(METHOD_PREFIX_RGXP) ? true : super
+  end
+end
 
 # Q2
 # 以下要件を満たす TryOver3::A2Proxy クラスを作成してください。
@@ -18,6 +33,20 @@ class TryOver3::A2
   end
 end
 
+class TryOver3::A2Proxy
+  def initialize(a2_obj)
+    @source = a2_obj
+    self.class.class_eval do
+      define_method(:respond_to_missing?) do |name, _include_private|
+        (a2_obj.public_methods - public_methods).include?(name) || super
+      end
+    end
+  end
+
+  def method_missing(name, *args)
+    @source.send(name, *args)
+  end
+end
 
 # Q3
 # 前回 OriginalAccessor の my_attr_accessor で定義した getter/setter に boolean の値が入っている場合には #{name}? が定義されるようなモジュールを実装しました。
@@ -31,10 +60,11 @@ module TryOver3::OriginalAccessor2
       end
 
       define_method "#{attr_sym}=" do |value|
-        if [true, false].include?(value) && !respond_to?("#{attr_sym}?")
-          self.class.define_method "#{attr_sym}?" do
-            @attr == true
-          end
+        if [true, false].include?(value)
+          return if respond_to?("#{attr_sym}?")
+          self.class.define_method("#{attr_sym}?") { @attr == true }
+        elsif respond_to?("#{attr_sym}?")
+          self.class.remove_method("#{attr_sym}?")
         end
         @attr = value
       end
@@ -49,6 +79,15 @@ end
 # TryOver3::A4::Hoge.run
 # # => "run Hoge"
 
+class TryOver3::A4
+  @runners = []
+  self.class.attr_accessor :runners
+
+  def self.const_missing(name)
+    return super if !runners.include?(name)
+    tap { |obj| obj.class.define_method(:run) { "run #{name}" } }
+  end
+end
 
 # Q5. チャレンジ問題！ 挑戦する方はテストの skip を外して挑戦してみてください。
 #
