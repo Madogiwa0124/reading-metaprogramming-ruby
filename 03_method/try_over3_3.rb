@@ -95,16 +95,21 @@ end
 module TryOver3::TaskHelper
   def self.included(klass)
     klass.define_singleton_method :task do |name, &task_block|
-      new_klass = Class.new do
-        define_singleton_method :run do
-          puts "start #{Time.now}"
-          block_return = task_block.call
-          puts "finish #{Time.now}"
-          block_return
-        end
+      singleton_class.define_method(:run_task) do |const_name: '', deplicated: false|
+        warn "Warning: #{self}::#{const_name}.run is deprecated" if deplicated
+        puts "start #{Time.now}"
+        block_return = task_block.call
+        puts "finish #{Time.now}"
+        block_return
       end
-      new_klass_name = name.to_s.split("_").map{ |w| w[0] = w[0].upcase; w }.join
-      const_set(new_klass_name, new_klass)
+      private_class_method :run_task
+
+      singleton_class.define_method(name) { run_task }
+      singleton_class.define_method(:const_missing) do |const_name|
+        new_klass_name = name.to_s.split("_").map{ |w| w[0] = w[0].upcase; w }.join
+        return super(const_name) if new_klass_name.to_sym != const_name
+        tap { |obj| obj.class.define_method(:run) { run_task(const_name: const_name, deplicated: true) } }
+      end
     end
   end
 end
